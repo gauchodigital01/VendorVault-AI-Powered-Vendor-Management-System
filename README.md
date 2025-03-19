@@ -172,9 +172,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📬 Contact
 
-- GitHub: [@yourusername](https://github.com/yourusername)
-- Twitter: [@yourhandle](https://twitter.com/yourhandle)
-- Email: your.email@example.com
+- GitHub: [@digitalgaucho01](https://github.com/gauchodigital01)
+- Twitter: [@thelastgaucho](https://twitter.com/thelastgaucho)
+- Email: digitalgaucho01@gmail.com
 
 ## ⭐ Support
 
