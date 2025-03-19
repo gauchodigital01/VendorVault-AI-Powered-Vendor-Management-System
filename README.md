@@ -6,7 +6,7 @@
   <p><strong>Streamline your vendor relationships with AI-powered insights</strong></p>
 </div>
 
-[![CI/CD](https://github.com/yourusername/vendor-vault/actions/workflows/main.yml/badge.svg)](https://github.com/yourusername/vendor-vault/actions/workflows/main.yml)
+[![CI/CD](https://github.com/digitalgaucho01/vendor-vault/actions/workflows/main.yml/badge.svg)](https://github.com/digitalgaucho01/vendor-vault/actions/workflows/main.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -50,7 +50,7 @@ VendorVault is an open-source B2B SaaS application that helps businesses manage 
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/vendor-vault.git
+   git clone https://github.com/digitalgaucho01/vendor-vault.git
    cd vendor-vault
    ```
 
