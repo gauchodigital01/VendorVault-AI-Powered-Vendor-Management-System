@@ -1,0 +1,108 @@
+import React, { useState, useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchVendors, fetchVendorMetrics } from '../redux/actions/vendorActions';
+import { VendorTable } from '../components/VendorTable';
+import { MetricsCard } from '../components/MetricsCard';
+import { SearchFilter } from '../components/SearchFilter';
+import { PageHeader } from '../components/PageHeader';
+import { LoadingSpinner } from '../components/LoadingSpinner';
+
+const VendorDashboard = () => {
+  const dispatch = useDispatch();
+  const { vendors, loading, error } = useSelector(state => state.vendors);
+  const { metrics } = useSelector(state => state.metrics);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterOptions, setFilterOptions] = useState({
+    status: 'all',
+    category: 'all',
+    riskLevel: 'all'
+  });
+
+  useEffect(() => {
+    dispatch(fetchVendors());
+    dispatch(fetchVendorMetrics());
+  }, [dispatch]);
+
+  const handleSearch = (term) => {
+    setSearchTerm(term);
+  };
+
+  const handleFilterChange = (filters) => {
+    setFilterOptions(filters);
+  };
+
+  const filteredVendors = vendors.filter(vendor => {
+    // Apply search term filter
+    if (searchTerm && !vendor.name.toLowerCase().includes(searchTerm.toLowerCase())) {
+      return false;
+    }
+    
+    // Apply status filter
+    if (filterOptions.status !== 'all' && vendor.status !== filterOptions.status) {
+      return false;
+    }
+    
+    // Apply category filter
+    if (filterOptions.category !== 'all' && vendor.category !== filterOptions.category) {
+      return false;
+    }
+    
+    // Apply risk level filter
+    if (filterOptions.riskLevel !== 'all' && vendor.riskLevel !== filterOptions.riskLevel) {
+      return false;
+    }
+    
+    return true;
+  });
+
+  if (loading) return <LoadingSpinner />;
+  if (error) return <div className="error-message">Error loading vendors: {error}</div>;
+
+  return (
+    <div className="dashboard-container">
+      <PageHeader 
+        title="Vendor Dashboard" 
+        subtitle="Manage and monitor your vendor relationships"
+      />
+      
+      <div className="metrics-container">
+        <MetricsCard 
+          title="Total Vendors" 
+          value={metrics.totalVendors} 
+          trend={metrics.vendorTrend} 
+          icon="vendors"
+        />
+        <MetricsCard 
+          title="Active Contracts" 
+          value={metrics.activeContracts} 
+          trend={metrics.contractTrend} 
+          icon="contracts"
+        />
+        <MetricsCard 
+          title="Spend This Month" 
+          value={`$${metrics.monthlySpend.toLocaleString()}`} 
+          trend={metrics.spendTrend} 
+          icon="money"
+        />
+        <MetricsCard 
+          title="Compliance Score" 
+          value={`${metrics.complianceScore}%`} 
+          trend={metrics.complianceTrend} 
+          icon="compliance"
+        />
+      </div>
+      
+      <div className="filter-section">
+        <SearchFilter 
+          onSearch={handleSearch} 
+          onFilterChange={handleFilterChange}
+          filterOptions={filterOptions}
+        />
+      </div>
+      
+      <VendorTable vendors={filteredVendors} />
+    </div>
+  );
+};
+
+export default VendorDashboard;

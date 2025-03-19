@@ -1,0 +1,218 @@
+name: VendorVault CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  lint-and-test:
+    name: Lint and Test
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [16.x, 18.x]
+    
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: vendor_vault_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      redis:
+        image: redis:6
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+    
+    - name: Install server dependencies
+      run: |
+        cd server
+        npm ci
+    
+    - name: Install client dependencies
+      run: |
+        cd client
+        npm ci
+    
+    - name: Lint server code
+      run: |
+        cd server
+        npm run lint
+    
+    - name: Lint client code
+      run: |
+        cd client
+        npm run lint
+    
+    - name: Test server
+      run: |
+        cd server
+        npm test
+      env:
+        NODE_ENV: test
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/vendor_vault_test
+        REDIS_URL: redis://localhost:6379
+        JWT_SECRET: test_secret
+    
+    - name: Test client
+      run: |
+        cd client
+        npm test -- --coverage
+    
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      with:
+        flags: unittests
+
+  build:
+    name: Build and Package
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Use Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18.x'
+        cache: 'npm'
+    
+    - name: Install server dependencies
+      run: |
+        cd server
+        npm ci --production
+    
+    - name: Install client dependencies and build
+      run: |
+        cd client
+        npm ci
+        npm run build
+    
+    - name: Package application
+      run: |
+        mkdir -p dist
+        cp -r server dist/
+        mkdir -p dist/server/public
+        cp -r client/build/* dist/server/public/
+        cd dist
+        tar -czf vendor-vault.tar.gz server
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: vendor-vault-${{ github.sha }}
+        path: dist/vendor-vault.tar.gz
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Download artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: vendor-vault-${{ github.sha }}
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+    
+    - name: Deploy to Elastic Beanstalk
+      run: |
+        aws s3 cp vendor-vault.tar.gz s3://vendor-vault-deployments/staging/vendor-vault-${{ github.sha }}.tar.gz
+        aws elasticbeanstalk create-application-version \
+          --application-name vendor-vault \
+          --version-label ${{ github.sha }} \
+          --source-bundle S3Bucket="vendor-vault-deployments",S3Key="staging/vendor-vault-${{ github.sha }}.tar.gz"
+        aws elasticbeanstalk update-environment \
+          --environment-name vendor-vault-staging \
+          --version-label ${{ github.sha }}
+    
+    - name: Comment on PR
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '🚀 Deployed to staging: https://staging.vendorvault.example.com'
+          })
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Download artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: vendor-vault-${{ github.sha }}
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+    
+    - name: Deploy to Elastic Beanstalk
+      run: |
+        aws s3 cp vendor-vault.tar.gz s3://vendor-vault-deployments/production/vendor-vault-${{ github.sha }}.tar.gz
+        aws elasticbeanstalk create-application-version \
+          --application-name vendor-vault \
+          --version-label ${{ github.sha }} \
+          --source-bundle S3Bucket="vendor-vault-deployments",S3Key="production/vendor-vault-${{ github.sha }}.tar.gz"
+        aws elasticbeanstalk update-environment \
+          --environment-name vendor-vault-production \
+          --version-label ${{ github.sha }}
+    
+    - name: Create GitHub Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ github.run_number }}
+        release_name: Release v${{ github.run_number }}
+        draft: false
+        prerelease: false
